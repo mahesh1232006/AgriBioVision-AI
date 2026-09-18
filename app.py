@@ -708,6 +708,7 @@ page = st.sidebar.radio(
         "🔎 Identify & Information",
         "🩺 Disease & Pest Intelligence",
         "🧠 Explainable AI",
+        "🧬 V2 Intelligence Lab",
         "💬 Ask AgriBioVision",
         "🎤 Voice Assistant",
         "📂 Case History",
@@ -725,6 +726,508 @@ else:
 st.sidebar.caption(f"Model: {MODEL_NAME}")
 
 # -------------------------- HOME -----------------------------
+
+
+
+# ======================================================================
+# 🌿 AGRIBIOVISION AI — V2 INTELLIGENCE ENGINE
+# ======================================================================
+
+# This layer extends the existing application.
+# Existing identification, disease, explainability, voice and history
+# features are intentionally preserved.
+
+V2_ENGINE_VERSION = "2.0"
+
+
+# ----------------------------------------------------------------------
+# V2 ANALYSIS CONTRACT
+# ----------------------------------------------------------------------
+
+def v2_default_result():
+    return {
+        "status": "ready",
+        "engine_version": V2_ENGINE_VERSION,
+
+        "organism_identification": {
+            "common_name": "",
+            "scientific_name": "",
+            "category": "",
+            "confidence": "",
+            "evidence": []
+        },
+
+        "plant_health": {
+            "possible_problem": "",
+            "problem_type": "",
+            "confidence": "",
+            "severity": "",
+            "observed_evidence": [],
+            "possible_causes": []
+        },
+
+        "differential_possibilities": [],
+
+        "adaptive_questioning": {
+            "status": "",
+            "question": "",
+            "question_type": "",
+            "missing_information": []
+        },
+
+        "ecosystem": {
+            "entities": [],
+            "relationships": []
+        },
+
+        "progression": {
+            "state": "Uncertain",
+            "observations": [],
+            "score": None,
+            "confidence": ""
+        },
+
+        "uncertainty": {
+            "abstain": False,
+            "factors": [],
+            "message": ""
+        },
+
+        "safety": {
+            "expert_review_recommended": False,
+            "limitations": []
+        }
+    }
+
+
+# ----------------------------------------------------------------------
+# JSON extraction
+# ----------------------------------------------------------------------
+
+def v2_extract_json(raw_text):
+
+    if not raw_text:
+        return None
+
+    text = str(raw_text).strip()
+
+    # Remove markdown JSON fences
+    text = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE
+    )
+
+    text = re.sub(
+        r"\s*```$",
+        "",
+        text
+    )
+
+    # Direct JSON
+    try:
+        import json
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Search for first JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start != -1 and end > start:
+
+        candidate = text[start:end + 1]
+
+        try:
+            import json
+            return json.loads(candidate)
+        except Exception:
+            return None
+
+    return None
+
+
+# ----------------------------------------------------------------------
+# Safe V2 normalization
+# ----------------------------------------------------------------------
+
+def v2_normalize_result(data):
+
+    result = v2_default_result()
+
+    if not isinstance(data, dict):
+        result["status"] = "invalid_response"
+        return result
+
+    for section in result:
+
+        if section in [
+            "status",
+            "engine_version"
+        ]:
+            continue
+
+        if section in data:
+
+            if isinstance(
+                result[section],
+                dict
+            ) and isinstance(
+                data[section],
+                dict
+            ):
+
+                result[section].update(
+                    data[section]
+                )
+
+            else:
+
+                result[section] = data[section]
+
+    # Preserve engine metadata
+    result["engine_version"] = V2_ENGINE_VERSION
+
+    return result
+
+
+# ----------------------------------------------------------------------
+# V2 prompt builder
+# ----------------------------------------------------------------------
+
+def v2_build_app_prompt(
+    symptoms="",
+    context="",
+    previous_analysis=None
+):
+
+    previous_text = ""
+
+    if previous_analysis:
+
+        try:
+
+            import json
+
+            previous_text = json.dumps(
+                previous_analysis,
+                ensure_ascii=False
+            )
+
+        except Exception:
+
+            previous_text = str(
+                previous_analysis
+            )
+
+    return f"""
+You are the V2 intelligence engine of AgriBioVision AI.
+
+Your task is to perform multimodal agricultural and biological analysis.
+
+The system supports:
+- plants
+- animals
+- fish
+- birds
+- insects
+
+IMPORTANT SAFETY RULES:
+
+1. Use only evidence visible in the image or explicitly supplied by the user.
+2. Never invent visual symptoms.
+3. Clearly separate observations from inferences.
+4. Plant-health results are possible assessments, NOT definitive diagnoses.
+5. If evidence is insufficient, use uncertainty or abstention.
+6. Provide multiple plausible possibilities when appropriate.
+7. Do not expose hidden chain-of-thought.
+8. Give concise observable reasoning factors.
+9. Chemical recommendations must follow product labels and local regulations.
+10. Do not provide dangerous pesticide mixing instructions.
+11. Recommend expert review when uncertainty or agricultural risk is significant.
+
+NOVEL V2 CAPABILITIES:
+
+A. Adaptive Questioning
+Identify what additional information would reduce uncertainty.
+
+B. Differential Analysis
+Provide plausible alternative possibilities rather than forcing one conclusion.
+
+C. Uncertainty / Abstention
+The system may explicitly say that evidence is insufficient.
+
+D. Ecosystem Relationships
+Identify meaningful relationships between organisms or environmental factors
+when supported by the image or supplied context.
+
+E. Before/After Progression
+If previous analysis is provided, compare current and previous observations.
+Do not claim biological recovery solely from image appearance.
+
+USER SYMPTOMS:
+{symptoms}
+
+USER CONTEXT:
+{context}
+
+PREVIOUS ANALYSIS:
+{previous_text}
+
+Return ONLY valid JSON.
+
+Required structure:
+
+{{
+  "organism_identification": {{
+    "common_name": "",
+    "scientific_name": "",
+    "category": "",
+    "confidence": "",
+    "evidence": []
+  }},
+
+  "plant_health": {{
+    "possible_problem": "",
+    "problem_type": "",
+    "confidence": "",
+    "severity": "",
+    "observed_evidence": [],
+    "possible_causes": []
+  }},
+
+  "differential_possibilities": [],
+
+  "adaptive_questioning": {{
+    "status": "",
+    "question": "",
+    "question_type": "",
+    "missing_information": []
+  }},
+
+  "ecosystem": {{
+    "entities": [],
+    "relationships": []
+  }},
+
+  "progression": {{
+    "state": "Improving|Worsening|Stable|Uncertain",
+    "observations": [],
+    "score": null,
+    "confidence": ""
+  }},
+
+  "uncertainty": {{
+    "abstain": false,
+    "factors": [],
+    "message": ""
+  }},
+
+  "safety": {{
+    "expert_review_recommended": false,
+    "limitations": []
+  }}
+}}
+"""
+
+
+# ----------------------------------------------------------------------
+# Main V2 Gemini connection
+# ----------------------------------------------------------------------
+
+def run_v2_app_analysis(
+    image_bytes,
+    symptoms="",
+    context="",
+    previous_analysis=None
+):
+
+    if not image_bytes:
+
+        return {
+            "status": "missing_image",
+            "result": v2_default_result(),
+            "error": "No image was provided."
+        }
+
+    prompt = v2_build_app_prompt(
+        symptoms=symptoms,
+        context=context,
+        previous_analysis=previous_analysis
+    )
+
+    try:
+
+        # Reuse existing app Gemini interface.
+        parts = [
+            {
+                "type": "image",
+                "mime_type": "image/jpeg",
+                "data": __import__("base64").b64encode(
+                    image_bytes
+                ).decode("utf-8")
+            },
+            {
+                "type": "text",
+                "text": prompt
+            }
+        ]
+
+        raw, error = gemini_call(parts)
+
+        if error:
+
+            return {
+                "status": "gemini_error",
+                "result": v2_default_result(),
+                "error": error
+            }
+
+        parsed = v2_extract_json(raw)
+
+        if parsed is None:
+
+            return {
+                "status": "invalid_json",
+                "result": v2_default_result(),
+                "error": "V2 Gemini response was not valid JSON.",
+                "raw": raw
+            }
+
+        normalized = v2_normalize_result(
+            parsed
+        )
+
+        return {
+            "status": "success",
+            "result": normalized,
+            "error": None
+        }
+
+    except Exception as e:
+
+        return {
+            "status": "exception",
+            "result": v2_default_result(),
+            "error": str(e)
+        }
+
+
+# ----------------------------------------------------------------------
+# V2 safety normalization
+# ----------------------------------------------------------------------
+
+def v2_apply_safety(result):
+
+    if not isinstance(result, dict):
+
+        result = v2_default_result()
+
+    safety = result.setdefault(
+        "safety",
+        {}
+    )
+
+    safety.setdefault(
+        "expert_review_recommended",
+        False
+    )
+
+    safety.setdefault(
+        "limitations",
+        []
+    )
+
+    health = result.get(
+        "plant_health",
+        {}
+    )
+
+    confidence = str(
+        health.get(
+            "confidence",
+            ""
+        )
+    ).lower()
+
+    severity = str(
+        health.get(
+            "severity",
+            ""
+        )
+    ).lower()
+
+    uncertainty = result.get(
+        "uncertainty",
+        {}
+    )
+
+    if (
+        confidence in ["low", "uncertain"]
+        or
+        severity in ["high", "uncertain"]
+        or
+        uncertainty.get("abstain") is True
+    ):
+
+        safety[
+            "expert_review_recommended"
+        ] = True
+
+    limitation = (
+        "AI-assisted assessment; "
+        "important agricultural and treatment "
+        "decisions should be verified with "
+        "appropriate experts and trusted sources."
+    )
+
+    if limitation not in safety["limitations"]:
+
+        safety["limitations"].append(
+            limitation
+        )
+
+    return result
+
+
+# ----------------------------------------------------------------------
+# V2 final app wrapper
+# ----------------------------------------------------------------------
+
+def v2_app_pipeline(
+    image_bytes,
+    symptoms="",
+    context="",
+    previous_analysis=None
+):
+
+    response = run_v2_app_analysis(
+        image_bytes=image_bytes,
+        symptoms=symptoms,
+        context=context,
+        previous_analysis=previous_analysis
+    )
+
+    result = response.get(
+        "result",
+        v2_default_result()
+    )
+
+    result = v2_apply_safety(
+        result
+    )
+
+    response["result"] = result
+
+    return response
+
+
+# ======================================================================
+# END V2 INTELLIGENCE ENGINE
+# ======================================================================
+
 
 if page == "🏠 Home":
 
@@ -1062,6 +1565,702 @@ elif page == "🧠 Explainable AI":
                     st.write("•", x)
 
 # ----------------------- ASK PAGE ----------------------------
+
+
+# ================= V2 INTELLIGENCE LAB =================
+elif page == "🧬 V2 Intelligence Lab":
+
+    st.markdown(
+        """
+        <div style="
+            padding: 1.5rem;
+            border-radius: 18px;
+            background: linear-gradient(135deg,#0f766e,#166534);
+            color: white;
+            margin-bottom: 1.5rem;
+        ">
+            <h1 style="margin:0;">🧬 V2 Intelligence Lab</h1>
+            <p style="margin:0.5rem 0 0 0;">
+                Multimodal uncertainty-aware agricultural intelligence
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.info(
+        "V2 is an experimental intelligence layer. "
+        "It provides structured AI-assisted analysis and does not replace expert diagnosis."
+    )
+
+    # ------------------------------------------------------------------------
+    # INPUTS
+    # ------------------------------------------------------------------------
+
+    st.subheader("📷 1. Upload Image")
+
+    v2_image_file = st.file_uploader(
+        "Upload a plant, animal, fish, bird or insect image",
+        type=["jpg", "jpeg", "png", "webp"],
+        key="v2_image_upload"
+    )
+
+    st.subheader("📝 2. Optional Context")
+
+    v2_symptoms = st.text_area(
+        "Symptoms / visible observations",
+        placeholder=(
+            "Example: yellow spots on leaves, curling edges, "
+            "visible insects, unusual colour, etc."
+        ),
+        key="v2_symptoms"
+    )
+
+    v2_context = st.text_area(
+        "Environmental / agricultural context",
+        placeholder=(
+            "Example: crop name, growth stage, rainfall, soil condition, "
+            "recent treatment, location, etc."
+        ),
+        key="v2_context"
+    )
+
+    # ------------------------------------------------------------------------
+    # ANALYSIS BUTTON
+    # ------------------------------------------------------------------------
+
+    run_v2_button = st.button(
+        "🧬 Run V2 Intelligence Analysis",
+        type="primary",
+        use_container_width=True
+    )
+
+    if run_v2_button:
+
+        if v2_image_file is None:
+
+            st.warning(
+                "⚠️ Please upload an image before running V2 analysis."
+            )
+
+        else:
+
+            v2_image_bytes = v2_image_file.getvalue()
+
+            with st.spinner(
+                "🧠 AgriBioVision V2 is analysing the image..."
+            ):
+
+                try:
+
+                    # --------------------------------------------------------
+                    # 13.10E — UI → V2 PIPELINE
+                    # --------------------------------------------------------
+
+                    v2_result = v2_app_pipeline(
+                        image_bytes=v2_image_bytes,
+                        symptoms=v2_symptoms,
+                        context=v2_context,
+                        previous_analysis=None
+                    )
+
+                    st.session_state["last_v2_result"] = v2_result
+
+                except TypeError:
+
+                    # Compatibility fallback for an alternate V2 signature
+                    try:
+
+                        v2_result = v2_app_pipeline(
+                            v2_image_bytes,
+                            v2_symptoms,
+                            v2_context,
+                            None
+                        )
+
+                        st.session_state["last_v2_result"] = v2_result
+
+                    except Exception as fallback_error:
+
+                        v2_result = {
+                            "status": "error",
+                            "error": str(fallback_error)
+                        }
+
+                except Exception as e:
+
+                    v2_result = {
+                        "status": "error",
+                        "error": str(e)
+                    }
+
+                    st.session_state["last_v2_result"] = v2_result
+
+
+    # ------------------------------------------------------------------------
+    # DISPLAY LAST RESULT
+    # ------------------------------------------------------------------------
+
+    if "last_v2_result" in st.session_state:
+
+        result = st.session_state["last_v2_result"]
+
+        st.divider()
+        st.subheader("📊 V2 Analysis Result")
+
+        if not isinstance(result, dict):
+
+            st.error(
+                "❌ V2 returned an unexpected result format."
+            )
+
+        else:
+
+            status = result.get("status", "unknown")
+
+            # ---------------------------------------------------------------
+            # STATUS
+            # ---------------------------------------------------------------
+
+            if status in ["success", "completed"]:
+
+                st.success(
+                    "✅ V2 analysis completed."
+                )
+
+            elif status in ["partial_success", "partial"]:
+
+                st.warning(
+                    "⚠️ V2 analysis partially completed."
+                )
+
+            elif status == "abstained":
+
+                st.warning(
+                    "🛑 V2 abstained because the available evidence "
+                    "was insufficient for a reliable conclusion."
+                )
+
+            elif status == "error":
+
+                st.error(
+                    "❌ V2 analysis encountered an error."
+                )
+
+                if result.get("error"):
+                    st.code(
+                        str(result.get("error"))
+                    )
+
+            else:
+
+                st.info(
+                    f"V2 status: {status}"
+                )
+
+
+            # ---------------------------------------------------------------
+            # ERROR
+            # ---------------------------------------------------------------
+
+            if result.get("error"):
+
+                st.error(
+                    f"V2 error: {result.get('error')}"
+                )
+
+
+            # ---------------------------------------------------------------
+            # NORMALIZED RESULT
+            # ---------------------------------------------------------------
+
+            normalized = result.get(
+                "result",
+                result
+            )
+
+            if not isinstance(normalized, dict):
+                normalized = {}
+
+
+            # ---------------------------------------------------------------
+            # ORGANISM IDENTIFICATION
+            # ---------------------------------------------------------------
+
+            identification = normalized.get(
+                "organism_identification",
+                {}
+            )
+
+            if isinstance(identification, dict):
+
+                st.markdown("### 🔎 Organism Identification")
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric(
+                        "Common Name",
+                        str(
+                            identification.get(
+                                "common_name",
+                                identification.get("organism", "Unknown")
+                            )
+                        )
+                    )
+
+                with col2:
+                    st.metric(
+                        "Scientific Name",
+                        str(
+                            identification.get(
+                                "scientific_name",
+                                "Unknown"
+                            )
+                        )
+                    )
+
+                with col3:
+                    st.metric(
+                        "Confidence",
+                        str(
+                            identification.get(
+                                "confidence",
+                                "Unknown"
+                            )
+                        )
+                    )
+
+
+            # ---------------------------------------------------------------
+            # PLANT HEALTH
+            # ---------------------------------------------------------------
+
+            plant_health = normalized.get(
+                "plant_health",
+                {}
+            )
+
+            if isinstance(plant_health, dict) and plant_health:
+
+                st.markdown("### 🩺 Plant Health Intelligence")
+
+                problem = plant_health.get(
+                    "possible_problem",
+                    plant_health.get(
+                        "problem",
+                        "No specific problem identified"
+                    )
+                )
+
+                confidence = plant_health.get(
+                    "confidence",
+                    "Unknown"
+                )
+
+                severity = plant_health.get(
+                    "severity",
+                    "Unknown"
+                )
+
+                c1, c2, c3 = st.columns(3)
+
+                with c1:
+                    st.metric(
+                        "Possible Problem",
+                        str(problem)
+                    )
+
+                with c2:
+                    st.metric(
+                        "Confidence",
+                        str(confidence)
+                    )
+
+                with c3:
+                    st.metric(
+                        "Severity",
+                        str(severity)
+                    )
+
+
+            # ---------------------------------------------------------------
+            # DIFFERENTIAL ANALYSIS
+            # ---------------------------------------------------------------
+
+            differential = normalized.get(
+                "differential_possibilities",
+                []
+            )
+
+            if differential:
+
+                st.markdown("### 🔬 Differential Possibilities")
+
+                if isinstance(differential, list):
+
+                    for index, possibility in enumerate(
+                        differential[:5],
+                        start=1
+                    ):
+
+                        if isinstance(possibility, dict):
+
+                            name = possibility.get(
+                                "name",
+                                possibility.get(
+                                    "possible_problem",
+                                    "Possible condition"
+                                )
+                            )
+
+                            confidence = possibility.get(
+                                "confidence",
+                                "Unknown"
+                            )
+
+                            evidence = possibility.get(
+                                "supporting_evidence",
+                                possibility.get(
+                                    "evidence",
+                                    []
+                                )
+                            )
+
+                            with st.expander(
+                                f"{index}. {name} — {confidence}"
+                            ):
+
+                                if evidence:
+                                    st.write(
+                                        "Supporting evidence:"
+                                    )
+
+                                    if isinstance(evidence, list):
+                                        for item in evidence:
+                                            st.write(
+                                                f"• {item}"
+                                            )
+                                    else:
+                                        st.write(evidence)
+
+
+            # ---------------------------------------------------------------
+            # EVIDENCE
+            # ---------------------------------------------------------------
+
+            evidence = normalized.get(
+                "evidence",
+                normalized.get(
+                    "evidence_profile",
+                    {}
+                )
+            )
+
+            if evidence:
+
+                st.markdown("### 👁️ Evidence")
+
+                if isinstance(evidence, dict):
+
+                    for key, value in evidence.items():
+
+                        if value not in [
+                            None,
+                            "",
+                            [],
+                            {}
+                        ]:
+
+                            st.write(
+                                f"**{str(key).replace('_', ' ').title()}:**"
+                            )
+
+                            if isinstance(value, list):
+
+                                for item in value:
+                                    st.write(
+                                        f"• {item}"
+                                    )
+
+                            else:
+                                st.write(value)
+
+                elif isinstance(evidence, list):
+
+                    for item in evidence:
+                        st.write(
+                            f"• {item}"
+                        )
+
+
+            # ---------------------------------------------------------------
+            # UNCERTAINTY / ABSTENTION
+            # ---------------------------------------------------------------
+
+            uncertainty = normalized.get(
+                "uncertainty",
+                normalized.get(
+                    "uncertainty_factors",
+                    []
+                )
+            )
+
+            abstention = normalized.get(
+                "abstention",
+                normalized.get(
+                    "abstained",
+                    False
+                )
+            )
+
+            st.markdown("### 🎯 Uncertainty Awareness")
+
+            if isinstance(abstention, bool) and abstention:
+
+                st.warning(
+                    "🛑 The system is intentionally avoiding "
+                    "an overconfident conclusion."
+                )
+
+            elif isinstance(abstention, dict):
+
+                if abstention.get("abstained", False):
+
+                    st.warning(
+                        "🛑 V2 abstained because evidence was insufficient."
+                    )
+
+            if uncertainty:
+
+                if isinstance(uncertainty, list):
+
+                    for factor in uncertainty:
+                        st.write(
+                            f"• {factor}"
+                        )
+
+                elif isinstance(uncertainty, dict):
+
+                    st.json(
+                        uncertainty
+                    )
+
+
+            # ---------------------------------------------------------------
+            # ECOSYSTEM
+            # ---------------------------------------------------------------
+
+            ecosystem_entities = normalized.get(
+                "ecosystem_entities",
+                []
+            )
+
+            ecosystem_relationships = normalized.get(
+                "ecosystem_relationships",
+                []
+            )
+
+            if ecosystem_entities or ecosystem_relationships:
+
+                st.markdown("### 🌱 Agro-Ecosystem Intelligence")
+
+                if ecosystem_entities:
+
+                    st.write(
+                        "**Detected ecosystem entities**"
+                    )
+
+                    if isinstance(
+                        ecosystem_entities,
+                        list
+                    ):
+
+                        for entity in ecosystem_entities:
+
+                            if isinstance(entity, dict):
+
+                                st.write(
+                                    "• " +
+                                    str(
+                                        entity.get(
+                                            "name",
+                                            entity.get(
+                                                "common_name",
+                                                "Unknown entity"
+                                            )
+                                        )
+                                    )
+                                )
+
+                            else:
+
+                                st.write(
+                                    f"• {entity}"
+                                )
+
+                if ecosystem_relationships:
+
+                    st.write(
+                        "**Detected relationships**"
+                    )
+
+                    if isinstance(
+                        ecosystem_relationships,
+                        list
+                    ):
+
+                        for relation in ecosystem_relationships:
+
+                            if isinstance(relation, dict):
+
+                                source_entity = relation.get(
+                                    "source",
+                                    "Unknown"
+                                )
+
+                                relationship_type = relation.get(
+                                    "relationship",
+                                    relation.get(
+                                        "relationship_type",
+                                        "related to"
+                                    )
+                                )
+
+                                target_entity = relation.get(
+                                    "target",
+                                    "Unknown"
+                                )
+
+                                st.write(
+                                    f"• {source_entity} "
+                                    f"→ {relationship_type} → "
+                                    f"{target_entity}"
+                                )
+
+                            else:
+
+                                st.write(
+                                    f"• {relation}"
+                                )
+
+
+            # ---------------------------------------------------------------
+            # PROGRESSION
+            # ---------------------------------------------------------------
+
+            progression = normalized.get(
+                "progression",
+                {}
+            )
+
+            if progression:
+
+                st.markdown(
+                    "### 📈 Before / After Health Progression"
+                )
+
+                if isinstance(progression, dict):
+
+                    state = progression.get(
+                        "state",
+                        progression.get(
+                            "trend",
+                            "Uncertain"
+                        )
+                    )
+
+                    score = progression.get(
+                        "progress_score",
+                        progression.get(
+                            "score",
+                            None
+                        )
+                    )
+
+                    c1, c2 = st.columns(2)
+
+                    with c1:
+                        st.metric(
+                            "Trend",
+                            str(state)
+                        )
+
+                    with c2:
+
+                        if score is not None:
+
+                            st.metric(
+                                "Progress Score",
+                                str(score)
+                            )
+
+
+            # ---------------------------------------------------------------
+            # SAFETY
+            # ---------------------------------------------------------------
+
+            safety = normalized.get(
+                "safety",
+                {}
+            )
+
+            st.markdown("### 🛡️ Safety & Expert Review")
+
+            if isinstance(safety, dict):
+
+                expert_review = safety.get(
+                    "expert_review_recommended",
+                    False
+                )
+
+                if expert_review:
+
+                    st.warning(
+                        "👨‍🌾 Expert review is recommended."
+                    )
+
+                else:
+
+                    st.info(
+                        "ℹ️ This AI output is decision support, "
+                        "not a definitive diagnosis."
+                    )
+
+                limitations = safety.get(
+                    "limitations",
+                    []
+                )
+
+                if limitations:
+
+                    for limitation in limitations:
+                        st.write(
+                            f"• {limitation}"
+                        )
+
+            else:
+
+                st.info(
+                    "ℹ️ AI analysis should be verified when "
+                    "the situation is uncertain or high-risk."
+                )
+
+
+            # ---------------------------------------------------------------
+            # RAW STRUCTURED RESULT
+            # ---------------------------------------------------------------
+
+            with st.expander(
+                "🔧 View Structured V2 JSON"
+            ):
+
+                st.json(
+                    result
+                )
+
+
+# ================= END V2 INTELLIGENCE LAB =================
 
 elif page == "💬 Ask AgriBioVision":
 
